@@ -30,7 +30,7 @@
 
 `mkfs.vfat /dev/mydiskN` - форматирование раздела диска в vfat
 
-`mount /deb/mydiskN /nice/dir` - монтирование раздела диска 
+`mount /dev/mydiskN /nice/dir` - монтирование раздела диска 
 
 ## Скорость передачи данных
 
