@@ -189,6 +189,7 @@ static struct block_device_operations fops =
 int mydisk_init(void)
 {
     (device.data) = vmalloc(MEMSIZE * MY_SECTOR_SIZE);
+    if (device.data == NULL) return -1;
     /* Setup its partition table */
     copy_mbr_n_br(device.data);
 
@@ -260,15 +261,32 @@ static void dev_request(struct request_queue *q)
     }
 }
 
-void device_setup(void)
+int device_setup(void)
 {
-    mydisk_init();
+    if (mydisk_init() < 0) {
+        printk(KERN_ERR "error during memory init\n");
+        return -1;
+    }
     c = register_blkdev(c, "mydisk");// major no. allocation
+    if (c < 0) {
+        printk(KERN_ERR "error during major allocation\n");
+        goto err_major;
+    }
     printk(KERN_ALERT "Major Number is : %d",c);
     spin_lock_init(&device.lock); // lock for queue
     device.queue = blk_init_queue( dev_request, &device.lock);
 
+    if (device.queue == NULL) {
+        printk(KERN_ERR "error during queue preparation\n");
+        goto err_queue;
+    }
+
     device.gd = alloc_disk(8); // gendisk allocation
+
+    if (device.gd == NULL) {
+        printk(KERN_ERR "error during gendisk allocation\n");
+        goto err_gendisk;
+    }
 
     (device.gd)->major=c; // major no to gendisk
     device.gd->first_minor=0; // first minor of gendisk
@@ -276,19 +294,25 @@ void device_setup(void)
     device.gd->fops = &fops;
     device.gd->private_data = &device;
     device.gd->queue = device.queue;
-    device.size= mydisk_init();
+    device.size = MEMSIZE;
     printk(KERN_INFO"THIS IS DEVICE SIZE %d",device.size);
     sprintf(((device.gd)->disk_name), "mydisk");
     set_capacity(device.gd, device.size);
     add_disk(device.gd);
+    return 0;
+
+err_gendisk:
+    blk_cleanup_queue(device.queue);
+err_queue:
+    unregister_blkdev(c, "mydisk");
+err_major:
+    vfree(device.data);
+    return -1;
 }
 
 static int __init mydiskdrive_init(void)
 {
-    int ret=0;
-    device_setup();
-
-    return ret;
+    return device_setup();
 }
 
 void mydisk_cleanup(void)
